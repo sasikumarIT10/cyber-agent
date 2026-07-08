@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cybersecurity AI Agent</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0;
+    --text-muted: #94a3b8; --accent: #6366f1; --accent-hover: #818cf8;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .header .status { margin-left: auto; font-size: 13px; color: var(--green); }
+
+  /* Layout */
+  .container { display: flex; height: calc(100vh - 57px); }
+  .sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin: 16px 0 8px; }
+  .sidebar h3:first-child { margin-top: 0; }
+  .tool-btn { display: block; width: 100%; text-align: left; background: transparent; border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 6px; margin-bottom: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s; }
+  .tool-btn:hover { background: var(--accent); border-color: var(--accent); }
+  .tool-btn.active { background: var(--accent); border-color: var(--accent); }
+  .tool-btn .icon { margin-right: 8px; }
+
+  /* API Key bar */
+  .api-bar { padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .api-bar label { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+  .api-bar input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-family: monospace; }
+
+  /* Content area */
+  .content { flex: 1; padding: 24px; overflow-y: auto; }
+
+  /* Chat mode */
+  .chat-messages { flex: 1; overflow-y: auto; padding: 24px; }
+  .message { max-width: 800px; margin: 0 auto 16px; padding: 14px 18px; border-radius: 8px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .message.user { background: var(--accent); color: #fff; margin-left: auto; max-width: 600px; }
+  .message.assistant { background: var(--surface); border: 1px solid var(--border); }
+  .message code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+
+  /* Input bar */
+  .input-bar { padding: 16px 24px; background: var(--surface); border-top: 1px solid var(--border); display: flex; gap: 12px; }
+  .input-bar input, .input-bar textarea { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 16px; border-radius: 6px; font-size: 14px; font-family: inherit; resize: none; }
+  .input-bar button { background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s; }
+  .input-bar button:hover { background: var(--accent-hover); }
+  .input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Tool form */
+  .tool-form { max-width: 700px; margin: 0 auto; }
+  .tool-form h2 { font-size: 18px; margin-bottom: 4px; }
+  .tool-form .desc { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+  .form-group input, .form-group textarea, .form-group select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 12px; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  .form-group textarea { min-height: 120px; resize: vertical; }
+  .submit-btn { background: var(--accent); color: #fff; border: none; padding: 12px 32px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .submit-btn:hover { background: var(--accent-hover); }
+
+  /* Result */
+  .result-box { max-width: 700px; margin: 24px auto 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; white-space: pre-wrap; font-size: 14px; line-height: 1.6; word-break: break-word; }
+  .result-box.error { border-color: var(--red); }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Export button */
+  .export-btn { display: inline-block; margin-top: 12px; background: var(--green); color: #fff; border: none;
+    padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+  .export-btn:hover { opacity: 0.85; }
+
+  /* Reports list */
+  .report-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+  .report-item .info { flex: 1; }
+  .report-item .name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .report-item .meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .report-item a { background: var(--accent); color: #fff; padding: 6px 16px; border-radius: 6px;
+    text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .report-item a:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Cybersecurity AI Agent</h1>
+  <span class="badge">v2.1</span>
+  <span class="status" id="status">Connecting...</span>
+</div>
+
+<div class="container">
+  <div class="sidebar">
+    <h3>AI Chat</h3>
+    <button class="tool-btn active" onclick="showView('chat', this)"><span class="icon">&#128172;</span> Chat with Agent</button>
+
+    <h3>Quick Tools</h3>
+    <button class="tool-btn" onclick="showView('scan', this)"><span class="icon">&#128268;</span> Port Scanner</button>
+    <button class="tool-btn" onclick="showView('cve', this)"><span class="icon">&#128027;</span> CVE Lookup</button>
+    <button class="tool-btn" onclick="showView('dns', this)"><span class="icon">&#127760;</span> DNS Recon</button>
+    <button class="tool-btn" onclick="showView('reputation', this)"><span class="icon">&#128737;</span> IP/Domain Rep</button>
+    <button class="tool-btn" onclick="showView('logs', this)"><span class="icon">&#128220;</span> Log Analyzer</button>
+    <button class="tool-btn" onclick="showView('hash', this)"><span class="icon">&#128274;</span> Hash Checker</button>
+    <button class="tool-btn" onclick="showView('whois', this)"><span class="icon">&#128269;</span> WHOIS</button>
+    <button class="tool-btn" onclick="showView('geo', this)"><span class="icon">&#127758;</span> Geolocation</button>
+
+    <h3>Reports</h3>
+    <button class="tool-btn" onclick="showView('reports', this)"><span class="icon">&#128196;</span> Saved Reports</button>
+  </div>
+
+  <div class="main">
+    <div class="api-bar">
+      <label>API Key:</label>
+      <input type="password" id="apiKey" placeholder="Paste your API key here (shown at server startup)" />
+    </div>
+
+    <!-- Chat View -->
+    <div id="view-chat" class="view" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="input-bar">
+        <input type="text" id="chatInput" placeholder="Ask a cybersecurity question..." onkeydown="if(event.key==='Enter')sendChat()" />
+        <button onclick="sendChat()" id="chatSend">Send</button>
+      </div>
+    </div>
+
+    <!-- Tool Views -->
+    <div id="view-scan" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>Port Scanner</h2>
+        <p class="desc">Scan a target for open ports. Only scan systems you're authorized to test.</p>
+        <div class="form-group"><label>Target (IP or hostname)</label><input id="scan-target" placeholder="e.g. scanme.nmap.org" /></div>
+        <div class="form-group"><label>Port Range</label><input id="scan-ports" value="common" placeholder="common or 1-1024" /></div>
+        <button class="submit-btn" onclick="runTool('scan')">Scan</button>
+        <div class="result-box" id="scan-result" style="display:none;"></div>
+        <button class="export-btn" id="scan-export" style="display:none;" onclick="exportReport('scan')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-cve" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>CVE Lookup</h2>
+        <p class="desc">Search NIST NVD for vulnerabilities by keyword or CVE ID.</p>
+        <div class="form-group"><label>Keyword or CVE ID</label><input id="cve-keyword" placeholder="e.g. log4j or CVE-2021-44228" /></div>
+        <button class="submit-btn" onclick="runTool('cve')">Search</button>
+        <div class="result-box" id="cve-result" style="display:none;"></div>
+        <button class="export-btn" id="cve-export" style="display:none;" onclick="exportReport('cve')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-dns" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>DNS Reconnaissance</h2>
+        <p class="desc">Query DNS records and check email security (SPF, DMARC).</p>
+        <div class="form-group"><label>Domain</label><input id="dns-domain" placeholder="e.g. example.com" /></div>
+        <div class="form-group"><label><input type="checkbox" id="dns-security" /> Include security assessment (SPF/DMARC)</label></div>
+        <button class="submit-btn" onclick="runTool('dns')">Lookup</button>
+        <div class="result-box" id="dns-result" style="display:none;"></div>
+        <button class="export-btn" id="dns-export" style="display:none;" onclick="exportReport('dns')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-reputation" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>IP / Domain Reputation</h2>
+        <p class="desc">Check against AbuseIPDB and VirusTotal threat feeds.</p>
+        <div class="form-group"><label>IP Address or Domain</label><input id="rep-target" placeholder="e.g. 45.33.32.156 or suspicious-site.com" /></div>
+        <button class="submit-btn" onclick="runTool('reputation')">Check</button>
+        <div class="result-box" id="reputation-result" style="display:none;"></div>
+        <button class="export-btn" id="reputation-export" style="display:none;" onclick="exportReport('reputation')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-logs" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>Log Analyzer</h2>
+        <p class="desc">Paste security logs to detect brute force, SQLi, XSS, command injection, and more.</p>
+        <div class="form-group"><label>Log Content</label><textarea id="log-content" placeholder="Paste log entries here..."></textarea></div>
+        <button class="submit-btn" onclick="runTool('logs')">Analyze</button>
+        <div class="result-box" id="logs-result" style="display:none;"></div>
+        <button class="export-btn" id="logs-export" style="display:none;" onclick="exportReport('logs')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-hash" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>Hash Checker</h2>
+        <p class="desc">Check a file hash (MD5/SHA-1/SHA-256) against VirusTotal malware database.</p>
+        <div class="form-group"><label>File Hash</label><input id="hash-value" placeholder="MD5, SHA-1, or SHA-256 hash" /></div>
+        <button class="submit-btn" onclick="runTool('hash')">Check</button>
+        <div class="result-box" id="hash-result" style="display:none;"></div>
+        <button class="export-btn" id="hash-export" style="display:none;" onclick="exportReport('hash')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-whois" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>WHOIS Lookup</h2>
+        <p class="desc">Domain or IP registration details via RDAP.</p>
+        <div class="form-group"><label>Domain or IP</label><input id="whois-target" placeholder="e.g. example.com" /></div>
+        <button class="submit-btn" onclick="runTool('whois')">Lookup</button>
+        <div class="result-box" id="whois-result" style="display:none;"></div>
+        <button class="export-btn" id="whois-export" style="display:none;" onclick="exportReport('whois')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-geo" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>IP Geolocation</h2>
+        <p class="desc">Get country, city, ISP, and hosting detection for an IP.</p>
+        <div class="form-group"><label>IP Address</label><input id="geo-ip" placeholder="e.g. 8.8.8.8" /></div>
+        <button class="submit-btn" onclick="runTool('geo')">Geolocate</button>
+        <div class="result-box" id="geo-result" style="display:none;"></div>
+        <button class="export-btn" id="geo-export" style="display:none;" onclick="exportReport('geo')">&#128196; Export HTML Report</button>
+      </div>
+    </div>
+
+    <!-- Reports View -->
+    <div id="view-reports" class="view content" style="display:none;">
+      <div class="tool-form">
+        <h2>Saved Reports</h2>
+        <p class="desc">All scan results are automatically saved as shareable HTML reports. Click to view or share.</p>
+        <button class="submit-btn" onclick="loadReports()" style="margin-bottom:20px;">Refresh</button>
+        <div id="reports-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+let chatHistory = [];
+let lastToolResults = {}; // store last result per tool for export
+
+function getKey() { return document.getElementById('apiKey').value; }
+
+function showView(name, btn) {
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  const view = document.getElementById('view-' + name);
+  if (view) {
+    view.style.display = name === 'chat' ? 'flex' : 'block';
+  }
+  if (btn) btn.classList.add('active');
+  if (name === 'reports') loadReports();
+}
+
+// Health check
+fetch(BASE + '/health').then(r => r.json()).then(d => {
+  document.getElementById('status').textContent = d.api_key_configured ? 'Connected (API key set)' : 'Connected (no Anthropic key)';
+  document.getElementById('status').style.color = d.api_key_configured ? '#22c55e' : '#eab308';
+}).catch(() => {
+  document.getElementById('status').textContent = 'Disconnected';
+  document.getElementById('status').style.color = '#ef4444';
+});
+
+// Chat
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const query = input.value.trim();
+  if (!query) return;
+
+  const key = getKey();
+  if (!key) { alert('Enter your API key first.'); return; }
+
+  input.value = '';
+  const msgs = document.getElementById('chatMessages');
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'message user';
+  userDiv.textContent = query;
+  msgs.appendChild(userDiv);
+
+  const loadDiv = document.createElement('div');
+  loadDiv.className = 'message assistant';
+  loadDiv.innerHTML = '<span class="spinner"></span> Analyzing...';
+  msgs.appendChild(loadDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  document.getElementById('chatSend').disabled = true;
+
+  try {
+    const resp = await fetch(BASE + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      body: JSON.stringify({ query, history: chatHistory }),
+    });
+    const data = await resp.json();
+
+    if (resp.ok) {
+      chatHistory.push({ role: 'user', content: query });
+      chatHistory.push({ role: 'assistant', content: data.response });
+      loadDiv.textContent = data.response;
+    } else {
+      loadDiv.textContent = 'Error: ' + (data.detail || resp.statusText);
+      loadDiv.style.borderColor = '#ef4444';
+    }
+  } catch (e) {
+    loadDiv.textContent = 'Connection error: ' + e.message;
+    loadDiv.style.borderColor = '#ef4444';
+  }
+
+  document.getElementById('chatSend').disabled = false;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// Tool calls
+async function runTool(tool) {
+  const key = getKey();
+  if (!key) { alert('Enter your API key first.'); return; }
+
+  let endpoint, body;
+  switch (tool) {
+    case 'scan':
+      endpoint = '/api/scan';
+      body = { target: v('scan-target'), port_range: v('scan-ports') || 'common' };
+      break;
+    case 'cve':
+      endpoint = '/api/cve';
+      body = { keyword: v('cve-keyword') };
+      break;
+    case 'dns':
+      endpoint = '/api/dns';
+      body = { domain: v('dns-domain'), include_security: document.getElementById('dns-security').checked };
+      break;
+    case 'reputation':
+      endpoint = '/api/reputation';
+      body = { target: v('rep-target') };
+      break;
+    case 'logs':
+      endpoint = '/api/logs/analyze';
+      body = { log_content: v('log-content') };
+      break;
+    case 'hash':
+      endpoint = '/api/hash/check';
+      body = { hash_value: v('hash-value') };
+      break;
+    case 'whois':
+      endpoint = '/api/whois';
+      body = { target: v('whois-target') };
+      break;
+    case 'geo':
+      endpoint = '/api/geolocate';
+      body = { ip_address: v('geo-ip') };
+      break;
+  }
+
+  const resultEl = document.getElementById(tool + '-result');
+  const exportEl = document.getElementById(tool + '-export');
+  resultEl.style.display = 'block';
+  resultEl.className = 'result-box';
+  resultEl.innerHTML = '<span class="spinner"></span> Processing...';
+  if (exportEl) exportEl.style.display = 'none';
+
+  try {
+    const resp = await fetch(BASE + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      resultEl.textContent = data.result;
+      lastToolResults[tool] = data.result;
+      if (exportEl) exportEl.style.display = 'inline-block';
+    } else {
+      resultEl.textContent = 'Error: ' + (data.detail || resp.statusText);
+      resultEl.className = 'result-box error';
+    }
+  } catch (e) {
+    resultEl.textContent = 'Connection error: ' + e.message;
+    resultEl.className = 'result-box error';
+  }
+}
+
+// Export report — opens the most recent report for this tool
+async function exportReport(tool) {
+  const key = getKey();
+  if (!key) { alert('Enter your API key first.'); return; }
+
+  try {
+    const resp = await fetch(BASE + '/api/reports', {
+      headers: { 'X-API-Key': key },
+    });
+    const data = await resp.json();
+    if (data.reports && data.reports.length > 0) {
+      // Open the most recent report (already sorted newest first)
+      const reportName = data.reports[0].filename;
+      window.open(BASE + '/api/reports/' + reportName, '_blank');
+    } else {
+      alert('No reports found. Run a scan first.');
+    }
+  } catch (e) {
+    alert('Error loading reports: ' + e.message);
+  }
+}
+
+// Load reports list
+async function loadReports() {
+  const key = getKey();
+  if (!key) {
+    document.getElementById('reports-list').innerHTML = '<p style="color:var(--text-muted)">Enter your API key to view reports.</p>';
+    return;
+  }
+
+  const listEl = document.getElementById('reports-list');
+  listEl.innerHTML = '<span class="spinner"></span> Loading reports...';
+
+  try {
+    const resp = await fetch(BASE + '/api/reports', {
+      headers: { 'X-API-Key': key },
+    });
+    const data = await resp.json();
+
+    if (!data.reports || data.reports.length === 0) {
+      listEl.innerHTML = '<p style="color:var(--text-muted)">No reports yet. Run any tool and reports are saved automatically.</p>';
+      return;
+    }
+
+    listEl.innerHTML = data.reports.map(r => `
+      <div class="report-item">
+        <div class="info">
+          <div class="name">${r.filename}</div>
+          <div class="meta">${r.created} &mdash; ${r.size_kb} KB</div>
+        </div>
+        <a href="${BASE}/api/reports/${r.filename}" target="_blank">View</a>
+      </div>
+    `).join('');
+  } catch (e) {
+    listEl.innerHTML = '<p style="color:var(--red)">Error loading reports: ' + e.message + '</p>';
+  }
+}
+
+function v(id) { return document.getElementById(id).value.trim(); }
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git/
+data/
+reports/
+certs/
+*.db
+*.log
+node_modules/
+.pytest_cache/
+.mypy_cache/
+infrastructure/
+k8s/
+.github/

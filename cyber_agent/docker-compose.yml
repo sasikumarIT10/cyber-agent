@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  cyber-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: cyber-agent
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - API_HOST=0.0.0.0
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - agent-data:/app/data
+      - agent-reports:/app/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: cyber-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  agent-data:
+  agent-reports:
+  redis-data:

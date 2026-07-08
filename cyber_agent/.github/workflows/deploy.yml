@@ -1,0 +1,251 @@
+name: Build, Push & Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  GCP_REGION: us-central1
+  EKS_CLUSTER: cyber-agent-prod
+  GKE_CLUSTER: cyber-agent-prod
+  IMAGE_NAME: cyber-agent
+  HELM_RELEASE: cyber-agent
+
+jobs:
+  # ---- Stage 1: Lint & Test ----
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_TEST }}
+
+  # ---- Stage 2: Build & Push Docker Image ----
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: echo "version=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # --- AWS ECR ---
+      - name: Configure AWS credentials
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name == 'push'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push to ECR
+        if: github.event_name == 'push'
+        run: |
+          ECR_REGISTRY=${{ steps.ecr-login.outputs.registry }}
+          docker build -t $ECR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} .
+          docker push $ECR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker tag $ECR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} $ECR_REGISTRY/${{ env.IMAGE_NAME }}:latest
+          docker push $ECR_REGISTRY/${{ env.IMAGE_NAME }}:latest
+
+      # --- GCP Artifact Registry ---
+      - name: Authenticate to GCP
+        if: github.event_name == 'push'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for GCP
+        if: github.event_name == 'push'
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Build and push to Artifact Registry
+        if: github.event_name == 'push'
+        run: |
+          GAR_REGISTRY=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}-prod
+          docker build -t $GAR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} .
+          docker push $GAR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker tag $GAR_REGISTRY/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} $GAR_REGISTRY/${{ env.IMAGE_NAME }}:latest
+          docker push $GAR_REGISTRY/${{ env.IMAGE_NAME }}:latest
+
+  # ---- Stage 3: Terraform ----
+  terraform-aws:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/environments/aws
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -var-file=terraform.tfvars
+        if: github.event_name == 'pull_request'
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var-file=terraform.tfvars
+        if: github.event_name == 'push'
+
+  terraform-gcp:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/environments/gcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -var-file=terraform.tfvars
+        if: github.event_name == 'pull_request'
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var-file=terraform.tfvars
+        if: github.event_name == 'push'
+
+  # ---- Stage 4: Deploy to EKS ----
+  deploy-eks:
+    needs: [build, terraform-aws]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm upgrade (EKS)
+        run: |
+          helm upgrade --install ${{ env.HELM_RELEASE }} ./k8s/helm-chart \
+            -f ./k8s/helm-chart/values.yaml \
+            -f ./k8s/helm-chart/values-aws.yaml \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
+            --set secrets.anthropicApiKey=${{ secrets.ANTHROPIC_API_KEY }} \
+            --wait --timeout 5m
+
+      - name: Smoke test
+        run: |
+          ENDPOINT=$(kubectl get ingress ${{ env.HELM_RELEASE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          for i in {1..10}; do
+            if curl -sf "http://$ENDPOINT/health" > /dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Smoke test failed - rolling back"
+          helm rollback ${{ env.HELM_RELEASE }}
+          exit 1
+
+  # ---- Stage 5: Deploy to GKE ----
+  deploy-gke:
+    needs: [build, terraform-gcp]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GCP_REGION }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm upgrade (GKE)
+        run: |
+          helm upgrade --install ${{ env.HELM_RELEASE }} ./k8s/helm-chart \
+            -f ./k8s/helm-chart/values.yaml \
+            -f ./k8s/helm-chart/values-gcp.yaml \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
+            --set secrets.anthropicApiKey=${{ secrets.ANTHROPIC_API_KEY }} \
+            --wait --timeout 5m
+
+      - name: Smoke test
+        run: |
+          ENDPOINT=$(kubectl get ingress ${{ env.HELM_RELEASE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          for i in {1..10}; do
+            if curl -sf "http://$ENDPOINT/health" > /dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Smoke test failed - rolling back"
+          helm rollback ${{ env.HELM_RELEASE }}
+          exit 1

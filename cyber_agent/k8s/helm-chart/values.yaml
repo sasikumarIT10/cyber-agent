@@ -1,0 +1,96 @@
+replicaCount: 2
+
+image:
+  repository: cyber-agent
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "cyber-agent"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: cyber-agent.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+
+env:
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  LOG_LEVEL: "INFO"
+  RATE_LIMIT_RPM: "30"
+
+secrets:
+  anthropicApiKey: ""
+  virustotalApiKey: ""
+  abuseipdbApiKey: ""
+  shodanApiKey: ""
+
+persistence:
+  enabled: true
+  storageClass: ""
+  size: 5Gi
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readiness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Environment
+.env
+*.log
+
+# Data
+data/*.db
+reports/*.html
+
+# Certs
+certs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+Thumbs.db

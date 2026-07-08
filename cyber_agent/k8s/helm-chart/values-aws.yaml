@@ -1,0 +1,31 @@
+# EKS-specific overrides
+image:
+  repository: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/cyber-agent/prod"
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/cyber-agent-pod-role"
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERT_ID"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+  hosts:
+    - host: cyber-agent.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: cyber-agent-tls
+      hosts:
+        - cyber-agent.yourdomain.com
+
+persistence:
+  storageClass: gp3

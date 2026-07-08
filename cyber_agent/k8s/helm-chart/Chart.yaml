@@ -1,0 +1,13 @@
+apiVersion: v2
+name: cyber-agent
+description: AI-powered Cybersecurity Agent deployed on Kubernetes
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - cybersecurity
+  - ai-agent
+  - langgraph
+  - security-automation
+maintainers:
+  - name: Sasi
