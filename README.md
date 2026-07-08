@@ -20,34 +20,59 @@ An AI-powered cybersecurity automation platform built with **LangGraph**, **Anth
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub Actions CI/CD                          │
-│         test → build → push → terraform → helm deploy           │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │                               │
-┌────────▼────────┐           ┌──────────▼────────┐
-│      AWS        │           │       GCP         │
-│                 │           │                   │
-│  VPC (3 AZ)    │           │  VPC + Subnets    │
-│  EKS Cluster   │           │  GKE Cluster      │
-│  ECR Registry  │           │  Artifact Reg.    │
-│  ALB Ingress   │           │  Cloud Armor      │
-│  GuardDuty     │           │  Security CC      │
-│  CloudWatch    │           │  Cloud Monitoring │
-└────────────────┘           └───────────────────┘
-         │                               │
-         └───────────────┬───────────────┘
-                         │
-              ┌──────────▼──────────┐
-              │  Cyber Agent Pod    │
-              │                     │
-              │  FastAPI + LangGraph│
-              │  25 Security Tools  │
-              │  Cloud Scanning     │
-              └─────────────────────┘
+```mermaid
+graph TB
+    subgraph CICD["CI/CD Pipeline (GitHub Actions)"]
+        Test[Lint + Test] --> Build[Docker Build]
+        Build --> PushECR[Push to ECR]
+        Build --> PushGAR[Push to Artifact Registry]
+        PushECR --> TF_AWS[Terraform Apply AWS]
+        PushGAR --> TF_GCP[Terraform Apply GCP]
+        TF_AWS --> HelmEKS[Helm Deploy EKS]
+        TF_GCP --> HelmGKE[Helm Deploy GKE]
+        HelmEKS --> Smoke1[Smoke Test + Rollback]
+        HelmGKE --> Smoke2[Smoke Test + Rollback]
+    end
+
+    subgraph AWS["AWS Cloud"]
+        VPC_AWS[VPC - 3 AZ]
+        EKS[EKS Cluster]
+        ECR[ECR Registry]
+        ALB[ALB Ingress]
+        GD[GuardDuty]
+        CW[CloudWatch]
+        VPC_AWS --> EKS
+        ECR --> EKS
+        EKS --> ALB
+    end
+
+    subgraph GCP["GCP Cloud"]
+        VPC_GCP[VPC + Subnets]
+        GKE[GKE Cluster]
+        GAR[Artifact Registry]
+        CA[Cloud Armor]
+        SCC[Security Command Center]
+        CM[Cloud Monitoring]
+        VPC_GCP --> GKE
+        GAR --> GKE
+        GKE --> CA
+    end
+
+    subgraph Pod["Cyber Agent Pod"]
+        API[FastAPI Server]
+        LG[LangGraph + Claude]
+        Tools[25 Security Tools]
+        Cloud[Cloud Security Scanner]
+        API --> LG --> Tools
+        LG --> Cloud
+    end
+
+    HelmEKS --> EKS
+    HelmGKE --> GKE
+    EKS --> Pod
+    GKE --> Pod
+    Cloud --> GD
+    Cloud --> SCC
 ```
 
 ## Security Tools (25 Total)
